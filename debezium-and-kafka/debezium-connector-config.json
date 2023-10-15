@@ -1,0 +1,16 @@
+{
+  "name": "postgresql-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "connector.displayName": "PostgreSQL",
+    "topic.prefix": "pg-changes",
+    "database.user": "postgres",
+    "database.dbname": "db_local",
+    "table.exclude.list": "audit",
+    "database.hostname": "database",
+    "database.password": "postgres",
+    "name": "postgresql-connector",
+    "connector.id": "postgres",
+    "plugin.name": "pgoutput"
+  }
+}
