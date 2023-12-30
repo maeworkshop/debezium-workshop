@@ -1,0 +1,101 @@
+version: '3.8'
+services:
+  database:
+    image: postgres:14.1-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=db_local
+    ports:
+      - '5432:5432'
+    command: [ "postgres", "-c", "wal_level=logical" ]
+  zookeeper:
+    image: zookeeper:3.9.0
+    ports:
+      - 2181:2181
+      - 2888:2888
+      - 3888:3888
+  kafka:
+    image: docker.io/bitnami/kafka:3.4
+    ports:
+      - 9092:9092
+      - 9093:9093
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_ADVERTISED_LISTENERS=INTERNAL://kafka:9092,EXTERNAL://127.0.0.1:9093
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL
+      - KAFKA_LISTENERS=INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9093
+    depends_on:
+      - zookeeper
+  connect:
+    image: debezium/connect:2.4.0.Final
+    ports:
+      - 8083:8083
+      - 8778:8778
+    links:
+      - kafka
+      - database
+    environment:
+      - BOOTSTRAP_SERVERS=kafka:9092
+      - GROUP_ID=debezium-events
+      - CONFIG_STORAGE_TOPIC=debezium_configs
+      - OFFSET_STORAGE_TOPIC=debezium_offsets
+      - STATUS_STORAGE_TOPIC=debezium_statuses
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper:2181
+      - KAFKA_CLUSTERS_0_SCHEMA_REGISTRY=http://localhost:8081
+      - SPRING_PROFILES_ACTIVE=prod
+    ports:
+      - "9000:8080"
+    depends_on:
+      - kafka
+  debezium-ui:
+    image: debezium/debezium-ui:2.4
+    platform: linux/amd64
+    environment:
+      - KAFKA_CONNECT_URIS=http://connect:8083  # Pointing to Kafka Connect service
+    ports:
+      - 9091:8080
+    depends_on:
+      - connect
+  setup-debezium-connector:
+    image: curlimages/curl
+    depends_on:
+      - connect
+    links:
+      - connect
+    environment:
+      DEBEZIUM_CONFIG: |
+        {
+          "name": "postgresql-connector",
+          "config": {
+            "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+            "connector.displayName": "PostgreSQL",
+            "topic.prefix": "pg-changes",
+            "database.user": "postgres",
+            "database.dbname": "db_local",
+            "table.exclude.list": "audit",
+            "database.hostname": "database",
+            "database.password": "postgres",
+            "name": "postgresql-connector",
+            "connector.id": "postgres",
+            "plugin.name": "pgoutput"
+          } 
+        }
+    command: >
+      sh -c "
+        sleep 10;
+        echo Waiting for Kafka Connect to start listening on connect:8083...;
+        while ! nc -z connect 8083;
+        do
+          sleep 1;
+        done;
+        echo Kafka Connect is up!;
+        echo $$DEBEZIUM_CONFIG > /tmp/debezium-connector-config.json
+        curl -X POST -H \"Content-Type: application/json\" --data @/tmp/debezium-connector-config.json http://connect:8083/connectors;
+      "

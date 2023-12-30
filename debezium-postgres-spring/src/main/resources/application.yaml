@@ -1,0 +1,25 @@
+spring:
+  profiles:
+    active: dev
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/db_local
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create
+    show-sql: false
+  sql:
+    init:
+      mode: never
+  cloud:
+    stream:
+      kafka:
+        binder:
+          brokers: localhost:9093
+      bindings:
+        debeziumEventConsumer-in-0:
+          destination: pg-changes.public.person
+          group: 1
+          content-type: application/json
