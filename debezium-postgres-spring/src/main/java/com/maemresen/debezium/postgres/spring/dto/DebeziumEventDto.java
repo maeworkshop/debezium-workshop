@@ -13,6 +13,7 @@ import java.util.Map;
 
 @Data
 public class DebeziumEventDto {
+
     private Payload payload;
 
     @Data
@@ -63,5 +64,4 @@ public class DebeziumEventDto {
             throw new IllegalArgumentException("Unknown operation type code: " + code);
         }
     }
-
 }
